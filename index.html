@@ -19,7 +19,14 @@ button.ghost{background:#e8eef6;color:#1c3658}button.danger{background:#fceaea;c
 <main id="editor" class="hidden">
 <div class="grid"><section class="panel"><h2>기본 프로필</h2><label for="name">표시 이름</label><input id="name" maxlength="100"><label for="headline">한 줄 소개</label><input id="headline" maxlength="200"><label for="about">자기소개</label><textarea id="about"></textarea><label for="skills">핵심 역량 (쉼표로 구분)</label><input id="skills"></section>
 <section class="panel"><h2>프로젝트 편집</h2><p class="muted">한 줄에 하나씩 <strong>프로젝트명 | 설명 | 이미지 경로</strong> 형식으로 입력하세요. 이미지 경로는 기존 GitHub에 업로드된 파일 경로 또는 HTTPS 주소만 사용하세요.</p><textarea id="projects" style="min-height:240px" placeholder="행사 운영 분석 | 현장 동선 및 운영 개선안 | images/analysis.jpg"></textarea><p class="muted">기존 V5 프로젝트는 자동으로 가져오지 않습니다. 아직 기존 페이지와 데이터 연결 전입니다.</p></section></div>
-<section class="panel"><h2>미리보기</h2><p class="muted">입력값이 즉시 아래에 표시됩니다. 저장 전에도 확인할 수 있습니다.</p><div class="preview" id="preview" aria-live="polite"></div></section>
+
+<section class="panel"><h2>전체 콘텐츠 편집</h2><p class="muted">원본 V5의 경력·학력·자격·PDF·인포그래픽·외부 링크까지 편집합니다. 항목은 한 줄에 하나씩 작성하며, 각 줄은 | 로 구분합니다. 자료 파일은 기존 사이트에 보관됩니다.</p>
+<div class="grid">
+<div><label for="tagline">상단 소개 문구</label><textarea id="tagline" rows="2"></textarea><label for="strengths">핵심 강점 (한 줄에 하나)</label><textarea id="strengths" rows="4"></textarea>
+<label for="experience">경력 — 회사 | 직무 | 기간 | 업무 내용</label><textarea id="experience" rows="6"></textarea><label for="education">학력 — 학교 | 전공 | 기간</label><textarea id="education" rows="4"></textarea></div>
+<div><label for="certificates">자격 — 자격명 | 발급처·유형 | 상태 | 취득일</label><textarea id="certificates" rows="5"></textarea><label for="documents">PDF 자료실 — 이름 | 유형 | 설명 | PDF 주소 | 표지 주소</label><textarea id="documents" rows="6"></textarea><label for="mediaLinks">영상·관련 링크 — 제목 | 설명 | URL</label><textarea id="mediaLinks" rows="4"></textarea></div></div>
+<label for="infographics">인포그래픽 — 제목 | 유형 | 설명 | 이미지 주소</label><textarea id="infographics" rows="11"></textarea>
+<p class="muted">이미지와 PDF는 업로드가 아닌 기존 경로·주소 편집 방식입니다. 기존 이미지 파일 자체는 교체하지 않습니다.</p></section><section class="panel"><h2>미리보기</h2><p class="muted">입력값이 즉시 아래에 표시됩니다. 저장 전에도 확인할 수 있습니다.</p><div class="preview" id="preview" aria-live="polite"></div></section>
 <section class="panel"><h2>기존 V5 내용 가져오기</h2><p class="muted">원본 ZIP에서 확인한 소개·역량·프로젝트 정보를 편집란으로 가져옵니다. 현재 초안의 입력값은 교체되지만, ‘초안 저장’을 누르기 전에는 Firebase 데이터가 바뀌지 않습니다. 기존 인포그래픽과 PDF는 공개 사이트에서 그대로 유지됩니다.</p><button id="importV5" class="ghost">기존 V5 기본 정보 불러오기</button></section>
 <section class="panel"><h2>저장 / 게시</h2><p class="muted">초안 저장은 관리자에게만 보이고, 게시하기는 <code>published/site</code> 문서를 갱신합니다. 기존 공개 페이지가 이 문서를 읽도록 연결되기 전에는 방문자 화면은 바뀌지 않습니다.</p><div class="actions"><button id="save" class="ghost">초안 저장</button><button id="publish">게시하기</button><button id="reload" class="ghost">저장된 초안 다시 불러오기</button></div><p id="updated" class="muted"></p></section></main>
 <p id="status" class="status" role="status"></p>
@@ -39,7 +46,7 @@ const firebaseConfig = {
   measurementId: "G-LPL4DB3ZC8"
 };
 const $=id=>document.getElementById(id);
-const fields=["name","headline","about","skills","projects"];
+const fields=["name","headline","about","skills","projects","tagline","strengths","experience","education","certificates","documents","infographics","mediaLinks"];
 const status=(msg,error=false)=>{$("status").textContent=msg;$("status").style.color=error?"#b42318":"#315a87"};
 let auth,db,ready=false;
 const isConfigured=!Object.values(firebaseConfig).some(v=>String(v).startsWith("PASTE_"));
@@ -53,8 +60,10 @@ else {
  });
  }catch(e){status("Firebase 초기화 실패: "+e.message,true)}
 }
-function fromForm(){return {name:$("name").value.trim(),headline:$("headline").value.trim(),about:$("about").value,skills:$("skills").value.split(",").map(s=>s.trim()).filter(Boolean),projects:$("projects").value.split("\n").filter(s=>s.trim()).map(line=>{const [title="",description="",image=""]=line.split("|");return {title:title.trim(),description:description.trim(),image:image.trim()}})}}
-function intoForm(v){$("name").value=v?.name||"";$("headline").value=v?.headline||"";$("about").value=v?.about||"";$("skills").value=(v?.skills||[]).join(", ");$("projects").value=(v?.projects||[]).map(p=>[p.title||"",p.description||"",p.image||""].join(" | ")).join("\n");render()}
+const parseRows=(id,keys)=>$(id).value.split("\\n").map(l=>l.trim()).filter(Boolean).map(line=>{const cells=line.split("|").map(x=>x.trim());return Object.fromEntries(keys.map((k,i)=>[k,cells[i]||""]))});
+const showRows=(id,arr,keys)=>$(id).value=(arr||[]).map(item=>keys.map(k=>item?.[k]||"").join(" | ")).join("\\n");
+function fromForm(){return {name:$("name").value.trim(),headline:$("headline").value.trim(),about:$("about").value,tagline:$("tagline").value,skills:$("skills").value.split(",").map(s=>s.trim()).filter(Boolean),strengths:$("strengths").value.split("\\n").map(s=>s.trim()).filter(Boolean),projects:parseRows("projects",["title","description","image"]),experience:parseRows("experience",["company","role","period","description"]),education:parseRows("education",["school","major","period"]),certificates:parseRows("certificates",["title","issuer","status","period"]),documents:parseRows("documents",["title","type","description","url","thumbnail"]),infographics:parseRows("infographics",["title","type","description","image"]),mediaLinks:parseRows("mediaLinks",["title","description","url"])}};
+function intoForm(v){v=v||{};$("name").value=v.name||"";$("headline").value=v.headline||"";$("about").value=v.about||"";$("tagline").value=v.tagline||"";$("skills").value=(v.skills||[]).join(", ");$("strengths").value=(v.strengths||[]).join("\\n");showRows("projects",v.projects,["title","description","image"]);showRows("experience",v.experience,["company","role","period","description"]);showRows("education",v.education,["school","major","period"]);showRows("certificates",v.certificates,["title","issuer","status","period"]);showRows("documents",v.documents,["title","type","description","url","thumbnail"]);showRows("infographics",v.infographics,["title","type","description","image"]);showRows("mediaLinks",v.mediaLinks,["title","description","url"]);render()}
 function render(){const d=fromForm(),el=$("preview");el.replaceChildren();const add=(tag,txt,parent=el)=>{let node=document.createElement(tag);node.textContent=txt;parent.append(node);return node};add("h3",d.name||"이름");add("p",d.headline||"한 줄 소개");add("p",d.about||"자기소개");add("p","핵심 역량: "+(d.skills.join(" · ")||"미입력"));for(const p of d.projects){let item=document.createElement("div");item.className="preview-item";add("strong",p.title||"프로젝트",item);add("p",p.description,item);if(p.image)add("span","이미지: "+p.image,item).className="muted";el.append(item)}}
 fields.forEach(id=>$(id).addEventListener("input",render));
 $("login").addEventListener("click",async()=>{if(!ready)return;try{await signInWithEmailAndPassword(auth,$("email").value,$("password").value);$("password").value=""}catch(e){status("로그인 실패: "+e.code,true)}});
